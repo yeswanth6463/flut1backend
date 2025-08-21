@@ -36,6 +36,8 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -79,7 +81,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backendnew.wsgi.application'
 
+JAZZMIN_SETTINGS = {
+    "site_title": "Sailor Admin Portal",
+    "site_header": " Sailor Management",
+    "welcome_sign": "Welcome admin!",
+    "site_brand": "Sailor Dashboard",
 
+    # Colors
+    "theme": "cosmo",  # bootstrap theme (superhero, flatly, cosmo, etc.)
+    "dark_mode_theme": "cyborg",  # Dark theme
+
+    # Logo & favicon
+ 
+    
+        # Custom footer / copyright
+    "copyright": "© 2025 Thirdvizion labs. All rights reserved.",
+}
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 

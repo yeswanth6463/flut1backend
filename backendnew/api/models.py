@@ -1,12 +1,29 @@
 from django.db import models
+import hashlib
+import secrets
 
 # Create your models here.
-
 class sailor_users(models.Model):
-    email= models.EmailField(max_length=254, unique=True)
+    email = models.EmailField(max_length=254, unique=True)
     password = models.CharField(max_length=128)
     is_verified = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False)   
+    last_login = models.DateTimeField(null=True, blank=True)  
     
+    def __str__(self):
+        return self.email
+
+    def set_password(self, raw_password):
+        self.password = hashlib.sha256(raw_password.encode()).hexdigest()
+
+    def check_password(self, raw_password):
+        return self.password == hashlib.sha256(raw_password.encode()).hexdigest()
+
+
+class EmailVerificationToken(models.Model):
+    user = models.ForeignKey(sailor_users, on_delete=models.CASCADE)
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     
     

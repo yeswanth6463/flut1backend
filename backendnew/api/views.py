@@ -9,64 +9,100 @@ from django.contrib.auth.tokens import default_token_generator as token_generato
 from django.core.mail import EmailMultiAlternatives
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.utils.encoding import force_bytes, force_str
+from django.core.mail import EmailMultiAlternatives
+from django.http import JsonResponse, HttpResponse
+from rest_framework.decorators import api_view
+from .models import sailor_users   # make sure this is your User mode
+import secrets
+from django.core.cache import cache
+from django.utils import timezone
+from .utils import generate_token, verify_token 
 
 
-def send_verification_email(user, email):
-    # Generate UID + token
-    uid = urlsafe_base64_encode(force_bytes(user.pk))
-    token = token_generator.make_token(user)
+from django.conf import settings
 
-    verification_link = f"http://127.0.0.1:8000/verify/{uid}/{token}/"
+def send_verification_email(user, email=None):
+    if email is None:
+        email = user.email
+
+    token = generate_token(user.pk)
+    
+    verification_link = f"http://127.0.0.1:8000/api/verify/{token}/"
 
     subject = "Verify your email"
     from_email = "yourgmail@gmail.com"
     to = [email]
 
-    # Plain text version (fallback)
     text_content = f"Please click the link to verify your email: {verification_link}"
 
-    # HTML version (with button)
     html_content = f"""
     <html>
-      <body>
+    <body>
         <p>Welcome! Please verify your email by clicking the button below:</p>
-        <a href="{verification_link}" 
-           style="background-color:#4CAF50;
-                  color:white;
-                  padding:10px 20px;
-                  text-decoration:none;
-                  border-radius:5px;">
-           Verify Email
+        <p>
+        <a href="{verification_link}" target="_blank"
+            style="display:inline-block;
+                    background-color:#4CAF50;
+                    color:white;
+                    padding:10px 20px;
+                    text-decoration:none;
+                    border-radius:5px;
+                    font-weight:bold;">
+            ✅ Verify Email
         </a>
+        </p>
         <p>If the button doesn't work, copy and paste this link into your browser:</p>
-        <p>{verification_link}</p>
-      </body>
+        <p><a href="{verification_link}">{verification_link}</a></p>
+    </body>
     </html>
     """
 
-    # Create email
+
     msg = EmailMultiAlternatives(subject, text_content, from_email, to)
     msg.attach_alternative(html_content, "text/html")
     msg.send()
-    
+
 @api_view(['POST'])
 def register_user(request):
-    email = request.data.get('email')
-    password = request.data.get('password')
+    email = request.data.get("email")
+    password = request.data.get("password")
 
-    user = sailor_users.objects.create(email=email, password=password)
+    if not email or not password:
+        return JsonResponse({"error": "Email and password are required"}, status=400)
+
+    # ✅ Check if email already exists
+    if sailor_users.objects.filter(email=email).exists():
+        return JsonResponse({"msg": "User with this email already exists"}, status=208)
+
     
-    # send verification email
+    user = sailor_users.objects.create(email=email)
+    user.set_password(password)
+    user.save()
+
     send_verification_email(user, email)
 
     return JsonResponse({"message": "Verification email sent. Please check your inbox."})
+
+def verify_user(request, token):
+    user_id = verify_token(token)
+    if user_id:
+        user = sailor_users.objects.get(pk=user_id)
+        user.is_verified = True
+        user.save()
+        return HttpResponse("Email verified successfully")
+    return HttpResponse("Invalid or expired link")
+
 
 class sailorlist(generics.ListAPIView):
     queryset = sailor_users.objects.all()
     serializer_class = sailoruseserializer
     
 
-# Create your views here.
+
 ##########   Sailor Details   API ####################
 class sailorusersdetails(generics.ListCreateAPIView):
     queryset = sailors.objects.all()
@@ -97,6 +133,7 @@ def create_sailor(request):
     sailor = sailors.objects.create(
         name=name,
         age=age,
+        email = sailor_user,
         rank=rank,
         experience_years=experience_years,
         spouse_name=spouse_name,
@@ -106,6 +143,35 @@ def create_sailor(request):
         company_name=company_name
     )
     return Response({'msg':"created successfully"}, status=status.HTTP_201_CREATED)
+
+@api_view(['POST',"GET"])
+def login_for_user(request):
+    if request.method == 'POST':
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        try:
+            user = sailor_users.objects.get(email=email)
+        except sailor_users.DoesNotExist:
+            return Response({"error": "User with this email does not exist"}, 
+                            status=status.HTTP_404_NOT_FOUND)
+
+        if not user.check_password(password):
+            return Response({"error": "Incorrect password"}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if not user.is_verified:
+            return Response({"error": "Email not verified"}, 
+                            status=status.HTTP_403_FORBIDDEN)
+
+        # Update last login time
+        user.last_login = timezone.now()
+        user.save()
+
+        return Response({"message": "Login successful"}, status=status.HTTP_200_OK)
+
+    return Response({"message": "Use POST method to login"}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
 
 
     
